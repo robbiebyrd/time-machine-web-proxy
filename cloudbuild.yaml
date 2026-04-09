@@ -3,8 +3,6 @@
 # Cloud Run terminates TLS and WSS at the edge. Traffic arrives at the
 # container as plain HTTP, so the app needs no TLS configuration.
 #
-# One-time setup: run ./setup.sh before the first deploy.
-#
 # Deploy via: ./deploy.sh [prod]
 # Or directly: gcloud builds submit --config cloudbuild.yaml . \
 #   --project=PROJECT_ID \

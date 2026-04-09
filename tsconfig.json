@@ -6,7 +6,7 @@
 		"outDir": "dist",
 		"strict": true,
 		"skipLibCheck": true,
-		"noUnusedLocals": true,
+		"noUnusedLocals": false,
 		"noUnusedParameters": true
 	},
 	"include": ["timemachine.ts"]
