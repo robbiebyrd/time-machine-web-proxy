@@ -54,7 +54,7 @@ The proxy listens on port `8765` by default.
 | `ARCHIVE_RATE_PER_SEC` | `2` | Archive fetch rate limit (requests/sec) |
 | `ARCHIVE_BURST` | `5` | Token bucket burst capacity |
 | `ARCHIVE_MAX_RETRIES` | `3` | Max retries on transient errors |
-| `BACKOFF_INTERVAL_SEC` | `10` | Base backoff interval (seconds); uses exponential backoff |
+| `BACKOFF_INTERVAL_SEC` | _(unused)_ | Deprecated — backoff uses fixed steps: 1s, 10s, 30s, 1m, 5m |
 | `ARCHIVE_MAX_CONCURRENT` | `10` | Max concurrent in-flight archive requests |
 
 ---

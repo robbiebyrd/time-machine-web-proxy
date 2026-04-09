@@ -21,8 +21,7 @@ const allowedOrigin: string =
 const archiveRatePerSec: number = Number(process.env.ARCHIVE_RATE_PER_SEC) || 2;
 const archiveBurst: number = Number(process.env.ARCHIVE_BURST) || 5;
 const archiveMaxRetries: number = Number(process.env.ARCHIVE_MAX_RETRIES) || 3;
-const backOffIntervalSec: number =
-	Number(process.env.BACKOFF_INTERVAL_SEC) || 10;
+const BACKOFF_STEPS_MS: number[] = [1_000, 10_000, 30_000, 60_000, 300_000];
 const archiveMaxConcurrent: number =
 	Number(process.env.ARCHIVE_MAX_CONCURRENT) || 10;
 const whitelistHosts: string =
@@ -355,8 +354,9 @@ const fetchFromArchive = async (
 		);
 	} catch (err) {
 		if (isRetryable(err) && retriesLeft > 0) {
+			const step = archiveMaxRetries - retriesLeft;
 			const backoffMs =
-				1000 * backOffIntervalSec ** (archiveMaxRetries - retriesLeft);
+				BACKOFF_STEPS_MS[Math.min(step, BACKOFF_STEPS_MS.length - 1)];
 			console.warn("[TimeMachine] Connection error, retrying after cooloff", {
 				url,
 				retriesLeft,
