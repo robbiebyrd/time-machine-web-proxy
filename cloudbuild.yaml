@@ -66,6 +66,19 @@ steps:
       - --all-tags
       - $_DOCKERHUB_USERNAME/$_SERVICE_NAME
 
+  # Convert .env.prod (shell KEY=value format) to YAML (KEY: value) for
+  # --env-vars-file, which expects a YAML map. The shell format must be
+  # preserved so that deploy.sh can still `source` it locally.
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - -c
+      - |
+        grep -v '^\s*#' .env.prod | grep -v '^\s*$' |
+        awk -F'=' '{v=$2; for(i=3;i<=NF;i++) v=v"="$i; printf "%s: \"%s\"\n", $1, v}' |
+        sed 's/^LISTENER: .*/LISTENER: "0.0.0.0"/' > env.yaml
+
   # Deploy to Cloud Run (gen2)
   #
   # --execution-environment=gen2 is required for GCS volume mounts.
@@ -77,9 +90,9 @@ steps:
   #   multiple instances are safe — two instances racing on the same key write
   #   identical content.
   #
-  # --env-vars-file loads all variables from .env.prod.
-  # --set-env-vars overrides LISTENER because .env.prod binds to 127.0.0.1,
-  #   which Cloud Run cannot reach — the container must listen on 0.0.0.0.
+  # --env-vars-file loads env.yaml (converted from .env.prod with LISTENER
+  #   overridden to 0.0.0.0, since .env.prod binds to 127.0.0.1 which Cloud
+  #   Run cannot reach).
   #
   # --session-affinity keeps WebSocket connections on the same instance for
   #   their full lifetime.
@@ -97,8 +110,7 @@ steps:
       - --platform=managed
       - --execution-environment=gen2
       - --allow-unauthenticated
-      - --env-vars-file=.env.prod
-      - --set-env-vars=LISTENER=0.0.0.0
+      - --env-vars-file=env.yaml
       - --port=8765
       - --session-affinity
       - --timeout=3600
