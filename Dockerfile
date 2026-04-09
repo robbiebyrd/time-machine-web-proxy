@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json tsconfig.json ./
 RUN npm install
 COPY timemachine.ts ./
-RUN npm run build
+RUN npx tsc
 
 FROM node:bookworm-slim
 

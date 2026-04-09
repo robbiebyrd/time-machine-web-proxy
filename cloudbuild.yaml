@@ -1,0 +1,130 @@
+# Cloud Build — build and deploy Time Machine Web Proxy to Cloud Run
+#
+# Cloud Run terminates TLS and WSS at the edge. Traffic arrives at the
+# container as plain HTTP, so the app needs no TLS configuration.
+#
+# One-time setup: run ./setup.sh before the first deploy.
+#
+# Deploy via: ./deploy.sh [prod]
+# Or directly: gcloud builds submit --config cloudbuild.yaml . \
+#   --project=PROJECT_ID \
+#   --substitutions=_CACHE_BUCKET=BUCKET,COMMIT_SHA=$(git rev-parse --short HEAD)
+#
+# Substitutions (override via --substitutions or Cloud Build trigger):
+#   _REGION             GCP region to deploy to          (default: us-central1)
+#   _AR_HOSTNAME        Artifact Registry hostname        (default: us-docker.pkg.dev)
+#   _AR_REPOSITORY      Artifact Registry repository name (default: cloud-run-source-deploy)
+#   _SERVICE_NAME       Cloud Run service name            (default: time-machine-proxy)
+#   _CACHE_BUCKET       GCS bucket name for shared cache  (default: tm-cache-723408812472)
+#   _DOCKERHUB_USERNAME Docker Hub username               (default: robbiebyrd)
+
+steps:
+  # Build the container image
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
+      - -t
+      - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:latest
+      - .
+
+  # Push to Artifact Registry
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME
+
+  # Login to Docker Hub using token from Secret Manager
+  - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - echo "$$DOCKERHUB_TOKEN" | docker login --username $_DOCKERHUB_USERNAME --password-stdin
+    secretEnv: [DOCKERHUB_TOKEN]
+
+  # Tag for Docker Hub
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - tag
+      - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
+      - $_DOCKERHUB_USERNAME/$_SERVICE_NAME:$COMMIT_SHA
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - tag
+      - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:latest
+      - $_DOCKERHUB_USERNAME/$_SERVICE_NAME:latest
+
+  # Push to Docker Hub
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - $_DOCKERHUB_USERNAME/$_SERVICE_NAME
+
+  # Deploy to Cloud Run (gen2)
+  #
+  # --execution-environment=gen2 is required for GCS volume mounts.
+  #
+  # --add-volume / --add-volume-mount mounts the GCS bucket at /app/cache via
+  #   GCS FUSE. All instances share the same bucket, so cached responses are
+  #   available across scale-out events and restarts. Cache entries are keyed
+  #   by SHA256(url+time) and are write-once, so concurrent writes from
+  #   multiple instances are safe — two instances racing on the same key write
+  #   identical content.
+  #
+  # --env-vars-file loads all variables from .env.prod.
+  # --set-env-vars overrides LISTENER because .env.prod binds to 127.0.0.1,
+  #   which Cloud Run cannot reach — the container must listen on 0.0.0.0.
+  #
+  # --session-affinity keeps WebSocket connections on the same instance for
+  #   their full lifetime.
+  #
+  # --timeout 3600 allows long-lived WebSocket connections (max Cloud Run
+  #   supports). HTTP requests still honour normal timeouts.
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE_NAME
+      - --image=$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
+      - --region=$_REGION
+      - --platform=managed
+      - --execution-environment=gen2
+      - --allow-unauthenticated
+      - --env-vars-file=.env.prod
+      - --set-env-vars=LISTENER=0.0.0.0
+      - --port=8765
+      - --session-affinity
+      - --timeout=3600
+      - --cpu=1
+      - --memory=512Mi
+      - --min-instances=0
+      - --max-instances=10
+      - --add-volume=name=cache,type=cloud-storage,bucket=$_CACHE_BUCKET
+      - --add-volume-mount=volume=cache,mount-path=/app/cache
+
+images:
+  - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:$COMMIT_SHA
+  - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:latest
+  - $_DOCKERHUB_USERNAME/$_SERVICE_NAME:$COMMIT_SHA
+  - $_DOCKERHUB_USERNAME/$_SERVICE_NAME:latest
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/dockerhub-token/versions/latest
+      env: DOCKERHUB_TOKEN
+
+substitutions:
+  _SERVICE_NAME: time-machine-proxy
+  _REGION: us-central1
+  _AR_HOSTNAME: us-docker.pkg.dev
+  _AR_REPOSITORY: cloud-run-source-deploy
+  _CACHE_BUCKET: tm-cache-723408812472
+  _DOCKERHUB_USERNAME: robbiebyrd
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  substitution_option: ALLOW_LOOSE
