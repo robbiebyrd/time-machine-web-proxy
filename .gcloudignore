@@ -1,0 +1,7 @@
+# Inherit all .gitignore rules, then selectively override below.
+#!include:.gitignore
+
+# .env.prod is gitignored to keep secrets out of source control, but Cloud
+# Build needs it to configure the Cloud Run service via --env-vars-file.
+# The GitHub Actions workflow writes it from a secret before submitting.
+!.env.prod
