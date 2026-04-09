@@ -986,8 +986,23 @@ interface WsResponse {
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 
+const WS_KEEPALIVE_MS = Number(process.env.WS_KEEPALIVE_MS) || 30_000;
+
 wss.on("connection", (ws: WebSocket) => {
 	console.log("[TimeMachine WS] Client connected");
+
+	let isAlive = true;
+	ws.on("pong", () => { isAlive = true; });
+
+	const keepalive = setInterval(() => {
+		if (!isAlive) {
+			console.log("[TimeMachine WS] Client unresponsive, terminating");
+			ws.terminate();
+			return;
+		}
+		isAlive = false;
+		ws.ping();
+	}, WS_KEEPALIVE_MS);
 
 	ws.on("message", (raw: Buffer | string) => {
 		const data = typeof raw === "string" ? raw : raw.toString("utf-8");
@@ -1095,6 +1110,7 @@ wss.on("connection", (ws: WebSocket) => {
 	});
 
 	ws.on("close", () => {
+		clearInterval(keepalive);
 		console.log("[TimeMachine WS] Client disconnected");
 	});
 });
