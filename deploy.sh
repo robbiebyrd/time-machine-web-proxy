@@ -8,6 +8,7 @@ else
   source .env
 fi
 
-gcloud builds submit --config cloudbuild.yaml . \
+gcloud builds submit \
+  --config cloudbuild.yaml . \
   --project="$PROJECT_ID" \
   --substitutions="_CACHE_BUCKET=$CACHE_BUCKET,COMMIT_SHA=$(git rev-parse --short HEAD)"
