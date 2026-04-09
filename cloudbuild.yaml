@@ -114,7 +114,6 @@ steps:
       - --port=8765
       - --session-affinity
       - --timeout=3600
-      - --stop-timeout=30
       - --cpu=1
       - --memory=512Mi
       - --min-instances=0
