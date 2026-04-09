@@ -29,6 +29,9 @@ const whitelistHosts: string =
 	process.env.WHITELIST_HOSTS || "*";
 const proxyPrefix: string =
 	process.env.PROXY_PREFIX || "";
+const proxyBase: string =
+	process.env.PROXY_BASE_URL || `http://${hostname}:${port}`;
+const cacheClearToken: string = process.env.CACHE_CLEAR_TOKEN || "";
 
 if (!existsSync(cacheDir)) {
 	mkdirSync(cacheDir, { recursive: true });
@@ -624,7 +627,6 @@ const proxyFetch = async (
 	targetUrl: string,
 	time: string,
 ): Promise<ProxyResult> => {
-	const proxyBase = `http://${hostname}:${port}`;
 
 	// Check cache
 	const cached = await cacheGet(targetUrl, time);
@@ -757,8 +759,7 @@ const sendCached = async (
 	}
 
 	if (entry.isHtml) {
-		const proxyBase = `http://${hostname}:${port}`;
-		// Check what's already cached, then kick off background fetches for the rest
+			// Check what's already cached, then kick off background fetches for the rest
 		const cachedUrls = await getCachedResourceUrls(entry.body, time);
 		prefetchResources(entry.body, time);
 		const rewritten = rewriteArchiveLinks(
@@ -773,8 +774,7 @@ const sendCached = async (
 		);
 		res.end(rewritten);
 	} else if (entry.isCss) {
-		const proxyBase = `http://${hostname}:${port}`;
-		res.end(rewriteCssUrls(entry.body, proxyBase, time));
+			res.end(rewriteCssUrls(entry.body, proxyBase, time));
 	} else {
 		res.end(Buffer.from(entry.body, "base64"));
 	}
@@ -801,6 +801,13 @@ const server = http.createServer(
 		if (req.method === "DELETE") {
 			const { pathname } = new URL(req.url ?? "/", `http://localhost:${port}`);
 			if (pathname === "/cache") {
+				if (cacheClearToken) {
+					const auth = req.headers["authorization"] ?? "";
+					if (auth !== `Bearer ${cacheClearToken}`) {
+						res.writeHead(401).end("Unauthorized");
+						return;
+					}
+				}
 				await handleCacheClear(req, res);
 				return;
 			}
@@ -893,8 +900,7 @@ const server = http.createServer(
 			const isCss = contentType.startsWith("text/css");
 
 			if (isHtml) {
-				const proxyBase = `http://${hostname}:${port}`;
-				const html = await fetchRes.text();
+							const html = await fetchRes.text();
 				const filtered = stripWaybackToolbar(html, fetchRes.url);
 
 				// Cache stripped HTML before attempting image prefetch — if prefetch is
@@ -923,8 +929,7 @@ const server = http.createServer(
 				);
 				res.end(rewritten);
 			} else if (isCss) {
-				const proxyBase = `http://${hostname}:${port}`;
-				const css = await fetchRes.text();
+							const css = await fetchRes.text();
 
 				await cachePut(targetUrl, time, {
 					contentType,

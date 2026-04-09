@@ -42,6 +42,7 @@ Copy `.env.example` to `.env` and adjust values as needed before starting.
 |---|---|---|
 | `TIMEMACHINE_PORT` | `8765` | Port the server listens on |
 | `LISTENER` | `0.0.0.0` | Bind address |
+| `PROXY_BASE_URL` | _(derived from `LISTENER:PORT`)_ | Public base URL used when rewriting proxied links. Must be set when running behind a reverse proxy or on Cloud Run (e.g. `https://your-service.run.app`) |
 | `ARCHIVE_TIME` | `19980101000000` | Default Wayback timestamp (`YYYYMMDDHHmmss`) |
 | `URL_PREFIX` | `https://web.archive.org/web` | Archive base URL |
 | `PROXY_PREFIX` | _(empty)_ | Optional path prefix appended between timestamp and URL |
