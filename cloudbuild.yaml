@@ -27,6 +27,11 @@ steps:
       - $_AR_HOSTNAME/$PROJECT_ID/$_AR_REPOSITORY/$_SERVICE_NAME:latest
       - .
 
+  # Authenticate Docker to Artifact Registry
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args: [auth, configure-docker, $_AR_HOSTNAME, --quiet]
+
   # Push to Artifact Registry
   - name: gcr.io/cloud-builders/docker
     args:
