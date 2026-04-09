@@ -157,9 +157,9 @@ const cachePut = async (
 // --- URL rewriting (regexes hoisted to module scope) ---
 
 const RE_ARCHIVE_ABSOLUTE =
-	/(<a\b[^>]*\bhref\s*=\s*["'])https?:\/\/web\.archive\.org\/web\/\d{1,14}\/(https?:\/\/[^"']*)(["'])/gi;
+	/(<a\b[^>]*\bhref\s*=\s*["'])https?:\/\/web\.archive\.org\/web\/(\d{1,14})\/(https?:\/\/[^"']*)(["'])/gi;
 const RE_ARCHIVE_RELATIVE =
-	/(<a\b[^>]*\bhref\s*=\s*["'])\/web\/\d{1,14}\/(https?:\/\/[^"']*)(["'])/gi;
+	/(<a\b[^>]*\bhref\s*=\s*["'])\/web\/(\d{1,14})\/(https?:\/\/[^"']*)(["'])/gi;
 const RE_IMG_SRC_ABSOLUTE =
 	/(<img\b[^>]*?\bsrc\s*=\s*["'])https?:\/\/web\.archive\.org\/web\/\d{1,14}[^/]*\/(https?:\/\/[^"']*)(["'])/gi;
 const RE_IMG_SRC_RELATIVE =
@@ -373,18 +373,18 @@ const fetchFromArchive = async (
 const rewriteArchiveLinks = (
 	html: string,
 	proxyBase: string,
-	time: string,
+	_time: string,
 ): string =>
 	html
 		.replace(
 			RE_ARCHIVE_ABSOLUTE,
-			(_, before, originalUrl, after) =>
-				`${before}${proxyBase}/?url=${encodeURIComponent(originalUrl)}&time=${time}${after}`,
+			(_, before, archiveTime, originalUrl, after) =>
+				`${before}${proxyBase}/?url=${encodeURIComponent(originalUrl)}&time=${archiveTime}${after}`,
 		)
 		.replace(
 			RE_ARCHIVE_RELATIVE,
-			(_, before, originalUrl, after) =>
-				`${before}${proxyBase}/?url=${encodeURIComponent(originalUrl)}&time=${time}${after}`,
+			(_, before, archiveTime, originalUrl, after) =>
+				`${before}${proxyBase}/?url=${encodeURIComponent(originalUrl)}&time=${archiveTime}${after}`,
 		);
 
 const _rewriteImageUrls = (

@@ -1,6 +1,6 @@
 # Time Machine Web Proxy
 
-A local proxy server that fetches archived web content from the [Wayback Machine](https://web.archive.org) and serves it with Wayback toolbar stripped, URLs rewritten to route through the proxy, and aggressive disk caching to minimize upstream requests.
+A proxy server that fetches archived web content from the [Wayback Machine](https://web.archive.org) and serves it with the Wayback toolbar stripped, URLs rewritten to route through the proxy, and aggressive disk caching to minimize upstream requests.
 
 Supports both HTTP and WebSocket interfaces.
 
@@ -20,19 +20,19 @@ Supports both HTTP and WebSocket interfaces.
 - WebSocket API for programmatic access
 - SSRF protection: blocks private/internal IPs and non-HTTP protocols
 - Optional host whitelist
-- Docker support
+- Bearer token protection on the cache management API
+- Docker support with Google Cloud Run deployment
 
 ---
 
 ## Quick Start (Docker)
 
 ```bash
+cp .env .env.local   # adjust values as needed
 docker compose up --build -d
 ```
 
 The proxy listens on port `8765` by default.
-
-Copy `.env.example` to `.env` and adjust values as needed before starting.
 
 ---
 
@@ -42,14 +42,14 @@ Copy `.env.example` to `.env` and adjust values as needed before starting.
 |---|---|---|
 | `TIMEMACHINE_PORT` | `8765` | Port the server listens on |
 | `LISTENER` | `0.0.0.0` | Bind address |
-| `PROXY_BASE_URL` | _(derived from `LISTENER:PORT`)_ | Public base URL used when rewriting proxied links. Must be set when running behind a reverse proxy or on Cloud Run (e.g. `https://your-service.run.app`) |
+| `PROXY_BASE_URL` | _(derived from `LISTENER:PORT`)_ | Public base URL used when rewriting proxied links. Required when running behind a reverse proxy or on Cloud Run (e.g. `https://your-service.run.app`) |
 | `ARCHIVE_TIME` | `19980101000000` | Default Wayback timestamp (`YYYYMMDDHHmmss`) |
 | `URL_PREFIX` | `https://web.archive.org/web` | Archive base URL |
 | `PROXY_PREFIX` | _(empty)_ | Optional path prefix appended between timestamp and URL |
 | `CACHE_DIR` | `/app/cache` | Directory for cached responses |
 | `CACHE_ENABLED` | `true` | Set to `false` to disable disk caching |
-| `HOST_CACHE_DIR` | _(Docker volume)_ | Host path to mount as cache (Docker only) |
-| `CORS_ORIGIN` | `http://localhost:5173` | Allowed CORS origin |
+| `CACHE_CLEAR_TOKEN` | _(empty)_ | Bearer token required to call `DELETE /cache`. If empty, the endpoint is unprotected. |
+| `CORS_ORIGIN` | `http://localhost:5173` | Allowed CORS origin (`*` for open) |
 | `WHITELIST_HOSTS` | `*` | Comma-separated list of allowed target hostnames (supports `*.example.com` wildcards). `*` allows all. |
 | `ARCHIVE_RATE_PER_SEC` | `2` | Archive fetch rate limit (requests/sec) |
 | `ARCHIVE_BURST` | `5` | Token bucket burst capacity |
@@ -92,7 +92,15 @@ Fetches a URL from the archive at the given timestamp and returns the response w
 
 ### `DELETE /cache`
 
-Clears cached entries. Supports optional filters:
+Clears cached entries. Supports optional filters.
+
+If `CACHE_CLEAR_TOKEN` is set, requests must include:
+
+```
+Authorization: Bearer <token>
+```
+
+Returns `401` if the token is missing or incorrect.
 
 | Query param | Description |
 |---|---|
@@ -109,7 +117,7 @@ Clears cached entries. Supports optional filters:
 
 ## WebSocket API
 
-Connect to `ws://<host>:<port>/ws`.
+Connect to `ws://<host>:<port>/ws` (or `wss://` when behind TLS).
 
 ### Request
 
@@ -156,22 +164,53 @@ For non-HTML responses, `html` contains a base64-encoded body.
 
 ## Development
 
-**Requirements:** Node.js 25, npm
+**Requirements:** Node.js 22+, npm
 
 ```bash
 npm install
 npx tsx timemachine.ts
 ```
 
-The TypeScript source compiles to `dist/timemachine.js` via `tsc`. The Docker image runs the compiled output.
+The source is a single TypeScript file (`timemachine.ts`). esbuild bundles it into `dist/timemachine.js`, which the Docker image runs.
 
 **npm scripts:**
 
 | Script | Description |
 |---|---|
-| `npm run proxy:up` | Build and start the proxy via Docker Compose |
-| `npm run proxy:down` | Stop the proxy |
-| `npm run proxy:cycle` | Restart the proxy (down then up) |
+| `npm run build` | Bundle `timemachine.ts` with esbuild |
+| `npm run typecheck` | Type-check without emitting |
+
+---
+
+## Deployment (Google Cloud Run)
+
+TLS and WSS termination are handled by Cloud Run — the container receives plain HTTP.
+
+**One-time setup:**
+
+```bash
+./setup2.sh   # creates GCP service account and IAM bindings for GitHub Actions
+```
+
+**Deploy:**
+
+```bash
+./deploy.sh         # deploys using .env
+./deploy.sh prod    # deploys using .env.prod
+```
+
+Or push to `main` — the GitHub Actions workflow triggers automatically.
+
+**GitHub secrets required:**
+
+| Secret | Description |
+|---|---|
+| `GCP_SA_KEY` | Service account JSON key |
+| `GCP_PROJECT_ID` | GCP project ID |
+| `GCP_CACHE_BUCKET` | GCS bucket name for shared cache |
+| `ENV_PROD` | Full contents of `.env.prod` |
+
+The shared cache is a GCS bucket mounted at `/app/cache` via GCS FUSE, so all Cloud Run instances share cached responses across restarts and scale-out events.
 
 ---
 
@@ -179,9 +218,10 @@ The TypeScript source compiles to `dist/timemachine.js` via `tsc`. The Docker im
 
 - Only `http:` and `https:` protocols are allowed as targets
 - Private and loopback addresses are blocked (`localhost`, `127.x`, `10.x`, `192.168.x`, etc.)
-- All archive fetches are constrained to the configured `URL_PREFIX` — arbitrary upstream fetches are not possible
+- All archive fetches are constrained to `URL_PREFIX` — arbitrary upstream fetches are not possible
 - CORS is restricted to `CORS_ORIGIN`
-- Host whitelist can further restrict which domains can be proxied
+- `WHITELIST_HOSTS` can restrict which domains can be proxied
+- `DELETE /cache` can be protected with a Bearer token via `CACHE_CLEAR_TOKEN`
 
 ---
 
