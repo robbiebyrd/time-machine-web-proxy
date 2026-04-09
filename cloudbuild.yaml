@@ -89,8 +89,6 @@ steps:
   #   by SHA256(url+time) and are write-once, so concurrent writes from
   #   multiple instances are safe — two instances racing on the same key write
   #   identical content.
-  #   write-global-max-blocks=32 raises the GCSFuse streaming write limit so
-  #   concurrent cache writes don't fall back to legacy staged writes.
   #
   # --env-vars-file loads env.yaml (converted from .env.prod with LISTENER
   #   overridden to 0.0.0.0, since .env.prod binds to 127.0.0.1 which Cloud
@@ -116,11 +114,12 @@ steps:
       - --port=8765
       - --session-affinity
       - --timeout=3600
+      - --stop-timeout=30
       - --cpu=1
       - --memory=512Mi
       - --min-instances=0
       - --max-instances=10
-      - --add-volume=name=cache,type=cloud-storage,bucket=$_CACHE_BUCKET,mount-options=write-global-max-blocks=32
+      - --add-volume=name=cache,type=cloud-storage,bucket=$_CACHE_BUCKET
       - --add-volume-mount=volume=cache,mount-path=/app/cache
 
 images:

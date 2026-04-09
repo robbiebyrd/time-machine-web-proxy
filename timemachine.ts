@@ -322,6 +322,12 @@ class ArchiveRequestQueue {
 		}
 	}
 
+	abort(): void {
+		const err = new Error("Server shutting down");
+		for (const entry of this.queue) entry.reject(err);
+		this.queue = [];
+	}
+
 	private refillTokens(): void {
 		const now = Date.now();
 		this.rateTokens = Math.min(
@@ -338,6 +344,26 @@ const archiveQueue = new ArchiveRequestQueue(
 	archiveRatePerSec,
 	archiveBurst,
 );
+
+const shutdownController = new AbortController();
+
+const abortableSleep = (ms: number): Promise<void> =>
+	new Promise<void>((resolve, reject) => {
+		const signal = shutdownController.signal;
+		if (signal.aborted) {
+			reject(new Error("Server shutting down"));
+			return;
+		}
+		const timer = setTimeout(resolve, ms);
+		signal.addEventListener(
+			"abort",
+			() => {
+				clearTimeout(timer);
+				reject(new Error("Server shutting down"));
+			},
+			{ once: true },
+		);
+	});
 
 const fetchFromArchive = async (
 	url: string,
@@ -363,7 +389,7 @@ const fetchFromArchive = async (
 				backoffMs,
 				error: err instanceof Error ? err.message : String(err),
 			});
-			await new Promise((r) => setTimeout(r, backoffMs));
+			await abortableSleep(backoffMs);
 			return fetchFromArchive(url, retriesLeft - 1, resourceType);
 		}
 		throw err;
@@ -1117,6 +1143,8 @@ wss.on("connection", (ws: WebSocket) => {
 
 const shutdown = () => {
 	console.log("TimeMachine shutting down...");
+	shutdownController.abort();
+	archiveQueue.abort();
 	wss.close();
 	server.close(() => process.exit(0));
 };
