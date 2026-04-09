@@ -123,7 +123,7 @@ availableSecrets:
 substitutions:
   _SERVICE_NAME: time-machine-proxy
   _REGION: us-central1
-  _AR_HOSTNAME: us-docker.pkg.dev
+  _AR_HOSTNAME: us-central1-docker.pkg.dev
   _AR_REPOSITORY: cloud-run-source-deploy
   _CACHE_BUCKET: tm-cache-723408812472
   _DOCKERHUB_USERNAME: robbiebyrd
