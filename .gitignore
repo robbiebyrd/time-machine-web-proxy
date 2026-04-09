@@ -1,0 +1,6 @@
+.env
+dist
+.claude
+codealike.json
+tsconfig.tsbuildinfo
+node_modules
